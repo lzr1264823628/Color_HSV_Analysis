@@ -9,7 +9,6 @@ Vue.use(IconsPlugin)
 Vue.use(DropdownPlugin)
 Vue.use(LayoutPlugin)
 Vue.config.productionTip = false
-
 new Vue({
   render: h => h(App),
 }).$mount('#app')
