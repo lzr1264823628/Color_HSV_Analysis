@@ -67,7 +67,7 @@
       </b-row>
       <b-row>
         <b-col>
-          <chart :chartData="chartData" :options="options" ref="chart"
+          <chart :chartData="chartData" :options="options" ref="chart" :plugins="plugins"
           ></chart>
         </b-col>
       </b-row>
@@ -76,10 +76,9 @@
 </template>
 
 <script>
-import chart from "@/components/chart";
+import LineChart from "@/components/linechart";
 import Color from "color"
-import Vue from 'vue'
-
+import colorCard from "@/components/chartjs-plugin-colorCard/colorCard";
 
 export default {
   name: 'App',
@@ -91,6 +90,7 @@ export default {
     this.ctx.height = this.size[0]
     this.ctx.width = this.size[1]
     window.onresize = this.changeCanvas
+    // console.log(this.chartData)
   },
   data() {
     return {
@@ -108,8 +108,13 @@ export default {
       scale: 1000,
       dotsList: [],
       chartData: {
+        // labels: [],
         labels: [],
-        datasets: [{label: 'H', backgroundColor: 'rgba(255,0,0,0.5)'},
+        tension: 0.1,
+        H: 'rgb(255,255,255)',
+        colorCardOpenFlag: false,
+        datasets: [
+            {label: 'H', backgroundColor: 'rgba(255,0,0,0.5)'},
           {label: 'S', backgroundColor: 'rgba(0,255,0,0.5)'},
           {label: 'V', backgroundColor: 'rgba(0,0,255,0.5)'}]
       },
@@ -118,14 +123,61 @@ export default {
       R: 10,
       lineWidth: 4,
       colorCardActive: null,
+      colorCardOpenFlag: false,
       options: {
+        datasets: {
+          line: {}
+        },
+        parsing: {
+          xAxisKey: 'x',
+          yAxisKey: 'y'
+        },
         onHover: (e) => {
-          let active_list = this.$refs.chart.$data._chart.getElementsAtXAxis(e)
-          if(active_list){
-            this.colorCardActive = active_list[0]._index
+          let chart = this.$refs.chart.$data._chart
+          let active = chart.getElementsAtEventForMode(e, 'nearest', {intersect: true}, true);
+          if (active.length !== 0 && active[0].datasetIndex !== 3) {
+            this.colorCardActive = active[0].index
           }
-        }
-      }
+        },
+        plugins: {
+          legend: {
+            onClick: (e, Item, legend) => {
+              // console.log(e, Item, legend)
+              const itemList = legend.legendItems
+              const index = Item.datasetIndex;
+              const ci = legend.chart;
+              if (ci.isDatasetVisible(index)) {
+                ci.hide(index);
+                Item.hidden = true;
+              } else {
+                ci.show(index);
+                Item.hidden = false;
+              }
+              const hiddenNumber = itemList.filter((it) => {
+                return !it.hidden
+              }).length
+              this.colorCardOpenFlag = hiddenNumber === 1 && itemList[3].hidden === false;
+            }
+          },
+          zoom: {
+            pan: {
+              enabled: true,
+              mode: 'x',
+              threshold: 0,
+              sensitivity: 0,
+              speed: 3
+            },
+            zoom: {
+              enabled: true,
+              speed: 10,
+              mode: 'x',
+              threshold: 0,
+              sensitivity: 0,
+            }
+          }
+        },
+      },
+      plugins: [colorCard]
     }
   },
   methods: {
@@ -212,12 +264,12 @@ export default {
     },
     deleteLine(index) {
       if (this.selectLine === index) this.selectLine = null
-      if(index < this.selectLine) this.selectLine--
+      if (index < this.selectLine) this.selectLine--
       this.dotsList.splice(index, 1)
       this.flush()
     },
-    backgroundStyle(index){
-      return {background: 'linear-gradient(to right,'+this.ColorData[index].color[0].rgb().string()+','+this.ColorData[index].color[this.ColorData[index].color.length-1].rgb().string()+')'}
+    backgroundStyle(index) {
+      return {background: 'linear-gradient(to right,' + this.ColorData[index].color[0].rgb().string() + ',' + this.ColorData[index].color[this.ColorData[index].color.length - 1].rgb().string() + ')'}
     },
     changeCanvas() {
       this.canvas.width = document.getElementById('can_col').clientWidth
@@ -267,31 +319,166 @@ export default {
       return index[1] * this.imgData.width * 4 + index[0] * 4
     },
     setDatasets(n) {
-      // console.log(this.lineDotsData)
-      // console.log(this.imgColorData)
-      // console.log(this.ColorData)
-      Vue.set(this, 'chartData', {
-        labels: this.ColorData.length ? this.ColorData[n].H.map((it) => it.x) : [],
-        datasets: [
+      if (this.ColorData.length !== 0) {
+        let colorSortByS = this.ColorData[n].colorSortByS
+        let sv = colorSortByS.map((it) => {
+          return {
+            h: Math.round(it.hsv().array()[0]),
+            s: Math.round(it.hsv().array()[1]),
+            v: Math.round(it.hsv().array()[2]),
+            type: 'SV',
+            color: it
+          }
+        })
+        const average = arr => arr.reduce((acc, val) => acc + val, 0) / arr.length;
+        const H = average(this.ColorData[n].H.map(it => it.y))
+        // console.log("setdata:", this.colorCardOpenFlag)
+        // this.chartData = Object.assign({},this.chartData,{labels:this.ColorData[n].H.map((it) => it.x),H:H ,datasets:[
+        //     {
+        //       label: 'H',
+        //       borderColor: 'rgba(255,0,0,0.5)',
+        //       data: this.ColorData.length ? this.ColorData[n].H : [],
+        //       fill: false,
+        //       pointBackgroundColor: (context) => {
+        //         let dataIndex = context.dataIndex
+        //         return this.ColorData[n].color[dataIndex].rgb().string()
+        //       }
+        //     },
+        //     {
+        //       label: 'S',
+        //       borderColor: 'rgba(0,255,0,0.5)',
+        //       data: this.ColorData.length ? this.ColorData[n].S : [],
+        //       fill: false,
+        //       pointBackgroundColor: (context) => {
+        //         let dataIndex = context.dataIndex
+        //         return this.ColorData[n].color[dataIndex].rgb().string()
+        //       }
+        //     },
+        //     {
+        //       label: 'V',
+        //       borderColor: 'rgba(0,0,255,0.5)',
+        //       data: this.ColorData.length ? this.ColorData[n].V : [],
+        //       fill: false,
+        //       pointBackgroundColor: (context) => {
+        //         let dataIndex = context.dataIndex
+        //         return this.ColorData[n].color[dataIndex].rgb().string()
+        //       }
+        //     },
+        //     {
+        //       label: "S-V",
+        //       // borderColor: 'rgba(96,10,121,0.5)',
+        //       tension: 0,
+        //       data: this.ColorData.length ? sv : [],
+        //       fill: false,
+        //       parsing: {
+        //         xAxisKey: 's',
+        //         yAxisKey: 'v'
+        //       },
+        //       showLine: false,
+        //       pointRadius: 4,
+        //       pointBackgroundColor: (context) => {
+        //         let dataIndex = context.dataIndex
+        //         return this.ColorData[n].colorSortByS[dataIndex].rgb().string()
+        //       },
+        //       pointBorderColor: 'rgb(255,255,255)',
+        //       // borderColor: (context) => {
+        //       //   const dataIndex = context.index
+        //       //   const color = this.ColorData[n].colorSortByS
+        //       //   const rgb = color[dataIndex].color
+        //       //   if(rgb)
+        //       //     return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`
+        //       //   else
+        //       //     return 'rgba(1,1,1,1)'
+        //       // },
+        //     },
+        //     {
+        //       label: 'Luminosity',
+        //       borderColor: 'rgba(49,42,42,0.8)',
+        //       data: this.ColorData.length ? this.ColorData[n].color.map((it) => {
+        //         return it.luminosity() * 100
+        //       }) : [],
+        //       fill: false,
+        //       pointBackgroundColor: (context) => {
+        //         let dataIndex = context.dataIndex
+        //         return this.ColorData[n].color[dataIndex].string()
+        //       }
+        //     }
+        //   ]})
+        this.chartData.labels.splice(0,this.chartData.labels.length,...this.ColorData[n].H.map((it) => it.x))
+        this.chartData.H = H
+        this.chartData.datasets.splice(0,this.chartData.datasets.length,...[
           {
             label: 'H',
             borderColor: 'rgba(255,0,0,0.5)',
             data: this.ColorData.length ? this.ColorData[n].H : [],
             fill: false,
+            pointBackgroundColor: (context) => {
+              let dataIndex = context.dataIndex
+              return this.ColorData[n].color[dataIndex].rgb().string()
+            }
           },
           {
             label: 'S',
             borderColor: 'rgba(0,255,0,0.5)',
             data: this.ColorData.length ? this.ColorData[n].S : [],
             fill: false,
+            pointBackgroundColor: (context) => {
+              let dataIndex = context.dataIndex
+              return this.ColorData[n].color[dataIndex].rgb().string()
+            }
           },
           {
             label: 'V',
             borderColor: 'rgba(0,0,255,0.5)',
             data: this.ColorData.length ? this.ColorData[n].V : [],
             fill: false,
-          }]
-      })
+            pointBackgroundColor: (context) => {
+              let dataIndex = context.dataIndex
+              return this.ColorData[n].color[dataIndex].rgb().string()
+            }
+          },
+          {
+            label: "S-V",
+            // borderColor: 'rgba(96,10,121,0.5)',
+            tension: 0,
+            data: this.ColorData.length ? sv : [],
+            fill: false,
+            parsing: {
+              xAxisKey: 's',
+              yAxisKey: 'v'
+            },
+            showLine: false,
+            pointRadius: 4,
+            pointBackgroundColor: (context) => {
+              let dataIndex = context.dataIndex
+              return this.ColorData[n].colorSortByS[dataIndex].rgb().string()
+            },
+            pointBorderColor: 'rgb(255,255,255)',
+            // borderColor: (context) => {
+            //   const dataIndex = context.index
+            //   const color = this.ColorData[n].colorSortByS
+            //   const rgb = color[dataIndex].color
+            //   if(rgb)
+            //     return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.5)`
+            //   else
+            //     return 'rgba(1,1,1,1)'
+            // },
+          },
+          {
+            label: 'Luminosity',
+            borderColor: 'rgba(49,42,42,0.8)',
+            data: this.ColorData.length ? this.ColorData[n].color.map((it) => {
+              return it.luminosity() * 100
+            }) : [],
+            fill: false,
+            pointBackgroundColor: (context) => {
+              let dataIndex = context.dataIndex
+              return this.ColorData[n].color[dataIndex].string()
+            }
+          }
+        ])
+        // console.log(this.chartData)
+      }
     }
   },
   computed: {
@@ -352,7 +539,11 @@ export default {
             c.push(color)
             i += 1
           })
-          data.push({H: H, S: S, V: V, color: c})
+          let colorSortByS = Array.from(c)
+          colorSortByS.sort((it1, it2) => {
+            return it1.hsv().color[1] - it2.hsv().color[1]
+          })
+          data.push({H: H, S: S, V: V, color: c, colorSortByS: colorSortByS})
         })
         return data
       } else {
@@ -379,6 +570,7 @@ export default {
           this.dotsList.splice(0, this.dotsList.length)
           this.selectLine = null
           this.scale = 1000
+          this.chartData.colorCardOpenFlag = false
 
           ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, img.width, img.height);
 
@@ -417,10 +609,13 @@ export default {
     },
     lineWidth() {
       this.flush()
+    },
+    colorCardOpenFlag(n) {
+      this.chartData.colorCardOpenFlag = n
     }
   },
   components: {
-    chart
+    chart: LineChart
   }
 }
 
@@ -459,10 +654,6 @@ li {
   cursor: pointer;
 }
 
-.row {
-  margin: 10px;
-}
-
 
 .colorBar {
   justify-content: center;
@@ -480,8 +671,6 @@ li {
 .colorBar .colorCardActive {
   border: 2px #c4c1c1 solid;
   border-radius: 10%;
-  //border-right: 1px #000000 solid;
-  //box-shadow: 0 1px 10px #7c7c7c;
-  transform: scale(2);
+//border-right: 1px #000000 solid; //box-shadow: 0 1px 10px #7c7c7c; transform: scale(2);
 }
 </style>
